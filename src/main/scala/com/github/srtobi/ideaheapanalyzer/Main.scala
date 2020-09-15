@@ -112,6 +112,9 @@ object Main {
       }
     }
 
+    val groupedTailLength = 5
+    val grouped = mutable.Buffer.empty[(List[(Item, Instance)], List[String])]
+
     println("Unreachable instances:")
     var n = 0
     reachables
@@ -121,21 +124,84 @@ object Main {
       .foreach { inst =>
         val path = pathToGcRoot(inst)
         if (!path.exists(_.getJavaClass.getName.contains(".scala"))) {
+          val fullPath = inst :: path
+          val fieldInInst = makeFieldPointingToMap(fullPath)
           n += 1
-          var prev = Option.empty[Instance]
-          for ((inst, i) <- (inst::path).zipWithIndex) {
-            print("  " * i)
-            for (item <- prev.map(inst.fieldPointingTo)) item match {
-              case ArrayItem(index) => print(s"[$index] in ")
-              case FieldItem(field) => print(s"${field.getName} in ")
-              case UnknownItem => print("unknown in ")
+          val builder = new StringBuilder
+          for ((inst, i) <- fullPath.zipWithIndex) {
+            builder ++= "  " * i
+            for (item <- fieldInInst.get(inst)) {
+              builder ++= itemToString(item)
+              builder ++= " in "
             }
-            println(inst.getJavaClass.getName + "#" + inst.getInstanceNumber)
-            prev = Some(inst)
+            builder ++= inst.getJavaClass.getName + "#" + inst.getInstanceNumber
+            builder += '\n'
+          }
+          val str = builder.result()
+          println(str)
+
+          // Try to group paths together to have a more comprehensive list
+          val list = path.map(inst => fieldInInst(inst) -> inst)
+          val idx = grouped.indexWhere(tup => pathEquals(tup._1, list))
+          if (idx < 0) {
+            grouped += list -> List(str)
+          } else {
+            val (list, strs) = grouped(idx)
+            grouped(idx) = list -> (str :: strs)
           }
         }
       }
 
+    println("\n" * 3)
     println("Count: " + n)
+
+    println()
+    println("==================================================================================================================")
+    println(s"==================================================== Grouped (${grouped.size}) ================================================")
+    println("==================================================================================================================")
+    println()
+
+    val indent = "#" + " " * 16
+    grouped.map(_._2).foreach {
+      case head :: rest =>
+        println(head)
+        //for (r <- rest) {
+        //  println(indent + r.replace("\n", "\n" + indent))
+        //  println()
+        //}
+    }
+  }
+
+  def makeFieldPointingToMap(path: List[Instance]): Map[Instance, Item] =
+    path.zip(path.tail).map {
+      case (to, from) => from -> from.fieldPointingTo(to)
+    }.toMap
+
+  def itemToString(item: Item, shadowIndex: Boolean = false): String = item match {
+    case ArrayItem(_) if shadowIndex => "[_]"
+    case ArrayItem(index) => s"[$index]"
+    case FieldItem(field) => s"${field.getName}"
+    case UnknownItem => "unknown"
+  }
+
+  def pathEquals(a: List[(Item, Instance)], b: List[(Item, Instance)]): Boolean = {
+    val pre = 3
+    def itemInInstanceToComparable(tup: (Item, Instance)): Equals =
+      (itemToString(tup._1, shadowIndex = true), tup._2.getJavaClass)
+
+    val ax = a.map(itemInInstanceToComparable)
+    val bx = b.map(itemInInstanceToComparable)
+    val aMap = ax.take(pre).toSet
+
+    // find first that is equal and check if rest is somewhat equal
+    val idx = bx.indexWhere(aMap.contains)
+    if (0 <= idx && idx < pre) {
+      val first = bx(idx)
+      val aRest = ax.dropWhile(_ != first).toSet
+      val bRest = bx.dropWhile(_ != first).toSet
+      val union = (aRest union bRest).size.toFloat
+      val intersection = (aRest intersect bRest).size.toFloat
+      (intersection / union) > 0.5
+    } else false
   }
 }
