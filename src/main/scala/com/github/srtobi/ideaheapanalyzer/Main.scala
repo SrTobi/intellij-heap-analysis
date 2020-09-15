@@ -199,9 +199,8 @@ object Main {
       val first = bx(idx)
       val aRest = ax.dropWhile(_ != first).toSet
       val bRest = bx.dropWhile(_ != first).toSet
-      val union = (aRest union bRest).size.toFloat
       val intersection = (aRest intersect bRest).size.toFloat
-      (intersection / union) > 0.5
+      (intersection / math.min(aRest.size, bRest.size)) > 0.5
     } else false
   }
 }
