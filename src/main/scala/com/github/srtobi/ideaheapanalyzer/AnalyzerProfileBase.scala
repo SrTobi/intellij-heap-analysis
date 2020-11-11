@@ -9,19 +9,14 @@ import scala.annotation.tailrec
 import scala.collection.mutable
 import scala.jdk.CollectionConverters._
 
-object Main {
+abstract class AnalyzerProfileBase {
   /////////////////////////////////////////////////////////////////////////////////////
   ////////////////// Adjust these functions to suit your needs ////////////////////////
   /////////////////////////////////////////////////////////////////////////////////////
-  def shouldBeStartOfPath(instance: Instance): Boolean =
-    instance.getJavaClass.getName.contains(".scala")
-
-  def filterPathFromAfterStartToGcRoot(path: Seq[Instance]): Boolean =
-    !path.exists(_.getJavaClass.getName.contains(".scala"))
-
-  def ignoreInstance(inst: Instance): Boolean =
-    inst.getJavaClass.getName.contains("cl.PluginClassLoader")
-
+  def shouldBeStartOfPath(instance: Instance): Boolean
+  def filterPathFromAfterStartToGcRoot(path: Seq[Instance]): Boolean
+  def ignoreInstance(inst: Instance): Boolean
+  def getRoots(heap: Heap): IterableOnce[Instance]
 
   /////////////////////////////////////////////////////////////////////////////////////
   ///////////////////////////////// And run ///////////////////////////////////////////
@@ -51,8 +46,8 @@ object Main {
       }
 
     println(s"Analyse dump... (${heap.getSummary.getTotalLiveInstances} instances)")
-    heap.getGCRoots.asScala
-      .map(_.getInstance)
+    getRoots(heap)
+      .iterator
       .foreach(addToUnprocessed(_))
 
 
@@ -225,13 +220,5 @@ object Main {
           Option(cur.getNearestGCRootPointer).filter(_ != cur).map(x => x -> x)
       }.toSeq
 
-  }
-
-  implicit class ValueOps(private val field: Value) extends AnyVal {
-    def outgoungReference(isSpecial: FieldValue => Boolean = _ => false): Option[Instance] = field match {
-      case item: ArrayItemValue => Option(item.getInstance())
-      case objField: ObjectFieldValue if !isSpecial(objField) => Option(objField.getInstance())
-      case _ => None
-    }
   }
 }
