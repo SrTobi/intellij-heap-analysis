@@ -5,6 +5,7 @@ import java.nio.file.Paths
 
 import org.netbeans.lib.profiler.heap._
 
+import scala.annotation.tailrec
 import scala.collection.mutable
 import scala.jdk.CollectionConverters._
 
@@ -105,10 +106,11 @@ object Main {
         .foreach(addToUnprocessed(_, cur))
     }
 
-    def pathToGcRoot(inst: Instance): List[Instance] = {
+    @tailrec
+    def pathToGcRoot(inst: Instance, acc: List[Instance] = Nil): List[Instance] = {
       parentMap.get(inst) match {
-        case Some(parent) => parent :: pathToGcRoot(parent)
-        case None => Nil
+        case Some(parent) => pathToGcRoot(parent, parent :: acc)
+        case None => acc.reverse
       }
     }
 
@@ -127,15 +129,28 @@ object Main {
           val fullPath = inst :: path
           val fieldInInst = makeFieldPointingToMap(fullPath)
           n += 1
+          val (skipRange, skipped) = if (fullPath.size > 100) {
+            (Range(20, fullPath.size - 20), fullPath.size - 40)
+          } else (Range(-1, -1), -1)
           val builder = new StringBuilder
-          for ((inst, i) <- fullPath.zipWithIndex) {
-            builder ++= "  " * i
+          var indent = 0
+          for {
+            (inst, i) <- fullPath.zipWithIndex
+            if !skipRange.contains(i)
+          } {
+            builder ++= "  " * indent
+            indent += 1
             for (item <- fieldInInst.get(inst)) {
               builder ++= itemToString(item)
               builder ++= " in "
             }
             builder ++= inst.getJavaClass.getName + "#" + inst.getInstanceNumber
             builder += '\n'
+            if (i == skipRange.start - 1) {
+              builder ++= "  " * indent
+              builder ++= s"<skipped $skipped entries>\n"
+              indent += 1
+            }
           }
           val str = builder.result()
           println(str)
