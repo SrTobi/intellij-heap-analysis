@@ -69,7 +69,7 @@ abstract class AnalyzerProfileBase {
     val groupedTailLength = 5
     val grouped = mutable.Buffer.empty[(List[(Item, Instance)], List[String])]
 
-    println("Unreachable instances:")
+    println("Result:")
     var n = 0
     reachables
       .iterator
