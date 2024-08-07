@@ -1,13 +1,12 @@
 package com.github.srtobi.ideaheapanalyzer
 
 import java.io.File
-import java.nio.file.Paths
-
-import org.netbeans.lib.profiler.heap._
+import java.nio.file.{Path, Paths}
+import org.netbeans.lib.profiler.heap.*
 
 import scala.annotation.tailrec
 import scala.collection.mutable
-import scala.jdk.CollectionConverters._
+import scala.jdk.CollectionConverters.*
 
 abstract class AnalyzerProfileBase {
   /////////////////////////////////////////////////////////////////////////////////////
@@ -23,7 +22,7 @@ abstract class AnalyzerProfileBase {
   /////////////////////////////////////////////////////////////////////////////////////
   def main(args: Array[String]): Unit = {
     val heap: Heap = HeapFactory.createHeap(findHProf())
-    val isSpecialReference = new SpecialReferenceRecognizer(heap).isSpecialReference _
+    val isSpecialReference = new SpecialReferenceRecognizer(heap).isSpecialReference
     val reachables = mutable.Set.empty[Instance]
     val unprocessed = mutable.Queue.empty[Instance]
     val parentMap = mutable.Map.empty[Instance, Instance]
@@ -140,10 +139,15 @@ abstract class AnalyzerProfileBase {
   }
 
   def findHProf(): File = {
-    val profileFiles = Paths.get(System.getProperty("user.home")).toFile
-      .listFiles()
-      .filter(_.getPath.endsWith(".hprof"))
-      .sortBy(_.getName)
+    def findIn(path: String): Seq[File] =
+      Paths.get(path).toFile
+        .listFiles()
+        .filter(_.getPath.endsWith(".hprof"))
+        .sortBy(_.getName)
+
+    val profileFiles =
+      findIn(System.getProperty("user.home")) ++
+        findIn(".")
 
     println("Found head dumps:")
     profileFiles.foreach(println)
@@ -156,10 +160,10 @@ abstract class AnalyzerProfileBase {
     }.toMap
 
   def itemToString(item: Item, shadowIndex: Boolean = false): String = item match {
-    case ArrayItem(_) if shadowIndex => "[_]"
-    case ArrayItem(index) => s"[$index]"
-    case FieldItem(field) => s"${field.getName}"
-    case UnknownItem => "unknown"
+    case Item.ArrayItem(_) if shadowIndex => "[_]"
+    case Item.ArrayItem(index) => s"[$index]"
+    case Item.FieldItem(field) => s"${field.getName}"
+    case Item.UnknownItem => "unknown"
   }
 
   def pathEquals(a: List[(Item, Instance)], b: List[(Item, Instance)]): Boolean = {
@@ -180,45 +184,5 @@ abstract class AnalyzerProfileBase {
       val intersection = (aRest intersect bRest).size.toFloat
       (intersection / math.min(aRest.size, bRest.size)) > 0.5
     } else false
-  }
-
-  sealed trait Item
-  case class ArrayItem(index: Int) extends Item
-  case class FieldItem(field: Field) extends Item
-  case object UnknownItem extends Item
-
-  implicit class InstanceOps(private val instance: Instance) {
-    assert(instance != null)
-
-    def outgoingReferences(isSpecial: (FieldValue, Instance) => Boolean = (_, _) => false): Iterator[Instance] = instance match {
-      case array: ObjectArrayInstance => array.getValues.iterator().asScala.filterNot(_ == null)
-      case inst: Instance =>
-        (inst.getFieldValues.iterator().asScala ++
-          inst.getStaticFieldValues.iterator().asScala)
-          .flatMap(_.outgoungReference(isSpecial(_, instance))) /*++
-            Iterator(inst.getJavaClass.getClassLoader)*/
-    }
-
-    def fieldPointingTo(target: Instance): Item = instance match {
-      case array: ObjectArrayInstance =>
-        val index = array.getValues.asScala.indexOf(target)
-        if (index >= 0) ArrayItem(index)
-        else UnknownItem
-      case inst: Instance =>
-        (inst.getFieldValues.iterator().asScala ++
-          inst.getStaticFieldValues.iterator().asScala)
-          .find(_.outgoungReference().contains(target))
-          .map(_.getField)
-          .map(FieldItem)
-          .getOrElse(UnknownItem)
-    }
-
-    def pathToGc: Seq[Instance] =
-      Iterator.unfold(instance) {
-        cur =>
-          assert(cur.getNearestGCRootPointer != null)
-          Option(cur.getNearestGCRootPointer).filter(_ != cur).map(x => x -> x)
-      }.toSeq
-
   }
 }
