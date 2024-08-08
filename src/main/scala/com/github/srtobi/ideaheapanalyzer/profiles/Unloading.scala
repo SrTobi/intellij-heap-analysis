@@ -9,6 +9,7 @@ import scala.jdk.CollectionConverters._
 object Unloading extends AnalyzerProfileBase {
   override def shouldBeStartOfPath(instance: Instance): Boolean =
     instance.getJavaClass.getName.contains(".scala")
+    //instance.getJavaClass.getName == "org.jetbrains.plugins.scala.compiler.highlighting.CompilerHighlightingEditorFocusListener"
 
   override def filterPathFromAfterStartToGcRoot(path: Seq[Instance]): Boolean =
     !path.exists(_.getJavaClass.getName.contains(".scala"))

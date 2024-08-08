@@ -8,21 +8,23 @@ import scala.jdk.CollectionConverters._
 
 object ProjectLeak extends AnalyzerProfileBase {
   override def shouldBeStartOfPath(instance: Instance): Boolean =
-    instance.getJavaClass.getName.contains("ScalaRenameClassTest")
+    instance.getJavaClass.getName.endsWith("ProjectImpl")
 
   override def filterPathFromAfterStartToGcRoot(path: Seq[Instance]): Boolean =
   //!path.init // <- last is gc root which is definitely scala, becauso of getRoots
   //  .exists(inst => inst.getJavaClass.getName.contains(".scala"))
     true
 
-  override def ignoreInstance(inst: Instance): Boolean = false
+  override def ignoreInstance(inst: Instance): Boolean = {
+    //inst.getJavaClass.getName.endsWith("AppDelayQueue")
     //inst.isGCRoot ||
     //  (inst.getJavaClass.getName.contains(".scala") &&
     //    inst.outgoingReferences().exists(_.getJavaClass.getName.endsWith("ProjectExImpl"))
     //    ) ||
     //  inst.getJavaClass.getName.contains("PsiManagerImpl")
-  //inst.getJavaClass.getName.contains("cl.PluginClassLoader")
-
+    //inst.getJavaClass.getName.contains("cl.PluginClassLoader")
+    false
+  }
   override def getRoots(heap: Heap): IterableOnce[Instance] =
     heap.getGCRoots.asScala
       .map(_.getInstance())
